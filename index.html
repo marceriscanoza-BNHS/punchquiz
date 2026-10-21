@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Camera Motion Ice Punch Quiz (Offline Ready)</title>
+
+    <!-- Manifest for PWA -->
+    <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22Ice%20Punch%20Quiz%22%2C%22short_name%22%3A%22IcePunch%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23020617%22%2C%22theme_color%22%3A%22%2338bdf8%22%7D">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+
+    <!-- MediaPipe Hands CDN Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        fredoka: ['Fredoka', 'sans-serif'],
+                        nunito: ['Nunito', 'sans-serif'],
+                    },
+                    colors: {
+                        iceBlue: '#38bdf8',
+                        deepIce: '#0284c7',
+                        frost: '#e0f2fe',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        html, body {
+            height: 100dvh;
+            width: 100vw;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Strict no scroll for tablets */
+            font-family: 'Fredoka', sans-serif;
+            background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+            color: #f8fafc;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Option cards below canvas */
+        .option-card {
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(8px);
+            border: 2px solid rgba(56, 189, 248, 0.25);
+            transition: all 0.2s ease;
+        }
+
+        .option-card.targeted {
+            border-color: #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.6);
+            transform: translateY(-2px);
+        }
+
+        .option-card.correct {
+            border-color: #22c55e !important;
+            background: rgba(20, 83, 45, 0.9) !important;
+            box-shadow: 0 0 25px rgba(34, 197, 94, 0.8) !important;
+        }
+
+        .option-card.wrong {
+            border-color: #ef4444 !important;
+            background: rgba(127, 29, 29, 0.9) !important;
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.8) !important;
+        }
+
+        /* Screen Shake Animation */
+        .shake {
+            animation: shake 0.25s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 0, 0); }
+            20%, 80% { transform: translate3d(3px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-5px, 0, 0); }
+            40%, 60% { transform: translate3d(5px, 0, 0); }
+        }
+
+        /* Custom Scrollbar for Modals */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.8);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #38bdf8;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between items-center p-2 sm:p-3 overflow-hidden">
+
+    <!-- HEADER / CONTROL BAR -->
+    <header class="w-full max-w-6xl glass-panel rounded-2xl p-2.5 px-3 sm:px-5 flex justify-between items-center z-20 shrink-0">
+        <div class="flex items-center space-x-2.5">
+            <div class="bg-cyan-500/20 p-2 rounded-xl border border-cyan-400/40 text-cyan-300">
+                <i class="fa-solid fa-icicles text-xl animate-pulse"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="font-bold text-base sm:text-xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-blue-200 to-indigo-200 tracking-wide">
+                        ICE PUNCH QUIZ
+                    </h1>
+                    <!-- Offline Status Badge -->
+                    <span id="offlineStatusBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center space-x-1">
+                        <i class="fa-solid fa-circle text-[8px] text-amber-400"></i>
+                        <span id="offlineStatusText">Checking Offline Cache...</span>
+                    </span>
+                </div>
+                <p class="text-[11px] text-cyan-200/70 font-medium hidden md:block">Punch the falling ice blocks with matching letters!</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-1.5 sm:space-x-3">
+            <!-- Score & Stats HUD -->
+            <div id="gameStats" class="hidden flex items-center space-x-2 bg-slate-900/90 px-2.5 py-1 rounded-xl border border-slate-700 text-xs">
+                <div>
+                    <span class="text-slate-400">Score:</span>
+                    <span id="scoreVal" class="font-extrabold text-amber-400 text-sm">0</span>
+                </div>
+                <div class="h-3.5 w-px bg-slate-700"></div>
+                <div>
+                    <span class="text-slate-400">Combo:</span>
+                    <span id="comboVal" class="font-extrabold text-cyan-400 text-sm">x0</span>
+                </div>
+                <div class="h-3.5 w-px bg-slate-700"></div>
+                <div>
+                    <span class="text-slate-400">Q:</span>
+                    <span id="qProgress" class="font-bold text-white">1/5</span>
+                </div>
+            </div>
+
+            <!-- Fullscreen Button -->
+            <button id="btnFullscreen" class="p-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl border border-slate-700 text-xs transition" title="Toggle Fullscreen">
+                <i class="fa-solid fa-expand"></i>
+            </button>
+
+            <!-- Questions Button -->
+            <button id="btnManageQuestions" class="px-2.5 py-1.5 bg-blue-600/80 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center space-x-1 border border-blue-400/40">
+                <i class="fa-solid fa-file-csv"></i>
+                <span class="hidden sm:inline">Questions</span>
+            </button>
+
+            <!-- Settings Button -->
+            <button id="btnSettings" class="p-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl border border-slate-700 text-xs transition" title="Settings">
+                <i class="fa-solid fa-sliders"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- QUESTION CONTAINER (ABOVE CANVAS) -->
+    <div id="questionContainer" class="w-full max-w-6xl glass-panel rounded-2xl p-3 my-1.5 text-center relative overflow-hidden shrink-0">
+        <div class="w-full bg-slate-800/80 h-1.5 rounded-full mb-2 overflow-hidden border border-slate-700">
+            <div id="timerBar" class="h-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-1000 w-full"></div>
+        </div>
+        <div class="flex items-center justify-center space-x-2 mb-1">
+            <span id="categoryBadge" class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40 tracking-wider">
+                ICE CHALLENGE
+            </span>
+            <span id="iceDifficultyBadge" class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-500/40 tracking-wider">
+                HARD ICE: 4-5 PUNCHES
+            </span>
+        </div>
+        <h2 id="questionText" class="text-base sm:text-xl font-bold text-white leading-tight drop-shadow-md">
+            Click "Start Game" to begin punching falling ice blocks!
+        </h2>
+    </div>
+
+    <!-- MAIN GAME CANVAS WRAPPER (FALLING ICE + CAMERA FEED) -->
+    <main id="canvasWrapper" class="w-full max-w-6xl relative flex-1 min-h-0 rounded-2xl overflow-hidden border-2 border-cyan-500/40 shadow-2xl bg-slate-950 my-1">
+        <!-- Hidden Video Source -->
+        <video id="webcam" class="hidden" playsinline></video>
+
+        <!-- Main Graphics Canvas -->
+        <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+        <!-- START / WELCOME OVERLAY -->
+        <div id="startScreen" class="absolute inset-0 z-30 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center">
+            <div class="max-w-lg flex flex-col items-center">
+                <div class="w-16 h-16 bg-cyan-500/20 rounded-2xl flex items-center justify-center border border-cyan-400/50 mb-3 shadow-cyan-500/30 shadow-lg">
+                    <i class="fa-solid fa-hand-fist text-3xl text-cyan-300 animate-bounce"></i>
+                </div>
+                <h2 class="text-2xl sm:text-3xl font-extrabold text-white mb-1.5 tracking-wide">PUNCH THE FALLING ICE</h2>
+                <p class="text-cyan-200/80 text-xs sm:text-sm mb-4 leading-relaxed">
+                    Ice blocks carrying letters <span class="text-amber-300 font-bold">(A, B, C, D)</span> fall from the top! Match the question answer below and punch the falling ice block directly on camera!
+                </p>
+
+                <!-- Offline Cache Banner Notification -->
+                <div id="startCacheStatus" class="w-full mb-4 p-2.5 rounded-xl bg-slate-900 border border-cyan-500/30 flex items-center justify-between text-xs">
+                    <div class="flex items-center space-x-2 text-slate-300">
+                        <i class="fa-solid fa-box-archive text-cyan-400"></i>
+                        <span>Offline Status: <strong id="startCacheText" class="text-amber-300">Checking...</strong></span>
+                    </div>
+                    <button id="btnPrecacheAssets" class="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-[11px] font-bold transition flex items-center space-x-1">
+                        <i class="fa-solid fa-download"></i>
+                        <span>Pre-cache App Now</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 w-full mb-5 text-[11px] text-left">
+                    <div class="bg-slate-900/90 p-2.5 rounded-xl border border-cyan-500/20">
+                        <p class="font-bold text-cyan-300 mb-0.5"><i class="fa-solid fa-camera mr-1"></i> Mirrored</p>
+                        <p class="text-slate-400 leading-tight">Mirrored video for intuitive left/right motion.</p>
+                    </div>
+                    <div class="bg-slate-900/90 p-2.5 rounded-xl border border-cyan-500/20">
+                        <p class="font-bold text-cyan-300 mb-0.5"><i class="fa-solid fa-wifi mr-1"></i> 100% Offline</p>
+                        <p class="text-slate-400 leading-tight">Pre-cached WASM model works without internet.</p>
+                    </div>
+                    <div class="bg-slate-900/90 p-2.5 rounded-xl border border-cyan-500/20">
+                        <p class="font-bold text-cyan-300 mb-0.5"><i class="fa-solid fa-burst mr-1"></i> Hard Ice</p>
+                        <p class="text-slate-400 leading-tight">Requires 4-5 fast hits to shatter completely.</p>
+                    </div>
+                </div>
+
+                <button id="btnStartGame" class="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-extrabold text-base rounded-2xl shadow-xl shadow-cyan-500/30 transform hover:scale-105 transition flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-play"></i>
+                    <span>START GAME & CAMERA</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- END SUMMARY OVERLAY -->
+        <div id="endScreen" class="hidden absolute inset-0 z-30 bg-slate-950/90 backdrop-blur-lg flex flex-col items-center justify-center p-4 text-center">
+            <div class="max-w-md w-full bg-slate-900 border-2 border-cyan-500/40 rounded-3xl p-5 shadow-2xl">
+                <div class="w-14 h-14 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto mb-2 text-2xl border border-amber-400/30">
+                    <i class="fa-solid fa-trophy animate-bounce"></i>
+                </div>
+                <h2 class="text-xl sm:text-2xl font-extrabold text-white mb-0.5">Ice Challenge Complete!</h2>
+                <p class="text-slate-400 text-xs mb-3">You shattered your way through the question deck!</p>
+
+                <div class="bg-slate-950/60 p-3 rounded-2xl border border-slate-800 mb-4 grid grid-cols-2 gap-2 text-center">
+                    <div>
+                        <p class="text-slate-400 text-[11px]">Final Score</p>
+                        <p id="finalScore" class="text-2xl font-black text-amber-400">0</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 text-[11px]">Accuracy</p>
+                        <p id="finalAccuracy" class="text-2xl font-black text-cyan-400">0%</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col space-y-2">
+                    <button id="btnRestart" class="w-full py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-sm rounded-xl transition flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-rotate-right"></i>
+                        <span>Play Again</span>
+                    </button>
+                    <button id="btnOpenManageEnd" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold text-xs rounded-xl border border-slate-700 transition flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                        <span>Edit Questions</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- OPTIONS PANEL BELOW CANVAS (WORDINGS DISPLAY ONLY) -->
+    <div id="optionsPanel" class="w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2 shrink-0">
+        <!-- Option A -->
+        <div data-choice="0" class="option-card rounded-xl p-2.5 flex items-center space-x-2.5 cursor-pointer">
+            <span class="w-7 h-7 rounded-lg bg-cyan-500 text-slate-950 font-black text-base flex items-center justify-center shrink-0 shadow">A</span>
+            <span class="option-text text-xs font-semibold text-slate-200 truncate">Option A Description</span>
+        </div>
+        <!-- Option B -->
+        <div data-choice="1" class="option-card rounded-xl p-2.5 flex items-center space-x-2.5 cursor-pointer">
+            <span class="w-7 h-7 rounded-lg bg-cyan-500 text-slate-950 font-black text-base flex items-center justify-center shrink-0 shadow">B</span>
+            <span class="option-text text-xs font-semibold text-slate-200 truncate">Option B Description</span>
+        </div>
+        <!-- Option C -->
+        <div data-choice="2" class="option-card rounded-xl p-2.5 flex items-center space-x-2.5 cursor-pointer">
+            <span class="w-7 h-7 rounded-lg bg-cyan-500 text-slate-950 font-black text-base flex items-center justify-center shrink-0 shadow">C</span>
+            <span class="option-text text-xs font-semibold text-slate-200 truncate">Option C Description</span>
+        </div>
+        <!-- Option D -->
+        <div data-choice="3" class="option-card rounded-xl p-2.5 flex items-center space-x-2.5 cursor-pointer">
+            <span class="w-7 h-7 rounded-lg bg-cyan-500 text-slate-950 font-black text-base flex items-center justify-center shrink-0 shadow">D</span>
+            <span class="option-text text-xs font-semibold text-slate-200 truncate">Option D Description</span>
+        </div>
+    </div>
+
+    <!-- FOOTER / STATUS BAR -->
+    <footer class="w-full max-w-6xl flex justify-between items-center text-[10px] text-cyan-200/60 pt-1 shrink-0">
+        <div class="flex items-center space-x-2">
+            <span id="statusIndicator" class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="cameraStatus">Camera: Ready</span>
+        </div>
+        <p class="text-right">Punch directly onto falling letter blocks. Works offline!</p>
+    </footer>
+
+    <!-- MODAL 1: QUESTION MANAGER & CSV UPLOADER -->
+    <div id="questionsModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3">
+        <div class="bg-slate-900 border-2 border-cyan-500/40 w-full max-w-2xl rounded-3xl flex flex-col max-h-[90vh] shadow-2xl overflow-hidden">
+            <div class="p-3 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
+                <div class="flex items-center space-x-2 text-cyan-300 font-bold text-base">
+                    <i class="fa-solid fa-list-check"></i>
+                    <span>Manage Quiz Questions</span>
+                </div>
+                <button id="btnCloseQuestionsModal" class="text-slate-400 hover:text-white p-1 text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-3 overflow-y-auto flex-1 space-y-4 text-xs">
+                <!-- CSV Upload Box -->
+                <div class="bg-slate-950/60 p-3 rounded-2xl border border-slate-800 flex flex-col sm:flex-row gap-2 items-center justify-between">
+                    <div>
+                        <h4 class="font-bold text-white mb-0.5">Import CSV File</h4>
+                        <p class="text-slate-400 text-[11px]">Format: <code>question,optA,optB,optC,optD,answer,hardIce</code></p>
+                    </div>
+                    <div class="flex items-center space-x-2 w-full sm:w-auto">
+                        <label class="cursor-pointer bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-3 py-1.5 rounded-xl transition flex items-center justify-center space-x-1 flex-1 sm:flex-none">
+                            <i class="fa-solid fa-upload"></i>
+                            <span>Upload CSV</span>
+                            <input type="file" id="csvFileInput" accept=".csv" class="hidden">
+                        </label>
+                        <button id="btnDownloadSampleCSV" class="bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold px-3 py-1.5 rounded-xl border border-slate-700 transition">
+                            Sample
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Add Custom Question Form -->
+                <div class="bg-slate-950/40 p-3 rounded-2xl border border-slate-800 space-y-2">
+                    <h4 class="font-bold text-cyan-300">Add New Question</h4>
+                    <input id="newQText" type="text" placeholder="Enter question text..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-400">
+                    
+                    <div class="grid grid-cols-2 gap-2">
+                        <input id="newOptA" type="text" placeholder="Option A" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-white">
+                        <input id="newOptB" type="text" placeholder="Option B" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-white">
+                        <input id="newOptC" type="text" placeholder="Option C" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-white">
+                        <input id="newOptD" type="text" placeholder="Option D" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs text-white">
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1 flex-wrap gap-2">
+                        <div class="flex items-center space-x-3 text-slate-300">
+                            <label>Answer:</label>
+                            <select id="newCorrectIdx" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-0.5 text-cyan-300 font-bold">
+                                <option value="0">A</option>
+                                <option value="1">B</option>
+                                <option value="2">C</option>
+                                <option value="3">0</option>
+                            </select>
+
+                            <label class="flex items-center space-x-1 cursor-pointer">
+                                <input id="newIsHardIce" type="checkbox" checked class="accent-cyan-400">
+                                <span>Hard Ice</span>
+                            </label>
+                        </div>
+                        <button id="btnAddQuestion" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl transition">
+                            <i class="fa-solid fa-plus mr-1"></i> Add
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Questions List Table -->
+                <div>
+                    <h4 class="font-bold text-white mb-1.5">Question Deck (<span id="qCount">0</span>)</h4>
+                    <div class="overflow-x-auto max-h-40 border border-slate-800 rounded-2xl">
+                        <table class="w-full text-left text-slate-300">
+                            <thead class="bg-slate-950 text-cyan-400 uppercase text-[10px]">
+                                <tr>
+                                    <th class="p-2">#</th>
+                                    <th class="p-2">Question</th>
+                                    <th class="p-2">Ans</th>
+                                    <th class="p-2">Type</th>
+                                    <th class="p-2 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="questionsTableBody" class="divide-y divide-slate-800 bg-slate-900/60">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3 border-t border-slate-800 bg-slate-950/50 flex justify-end space-x-2">
+                <button id="btnResetDefaultQuestions" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl font-semibold border border-slate-700 transition">
+                    Reset Defaults
+                </button>
+                <button id="btnSaveQuestions" class="px-4 py-1 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl transition">
+                    Save & Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: SETTINGS & OFFLINE PRE-CACHE MANAGER -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3">
+        <div class="bg-slate-900 border-2 border-cyan-500/40 w-full max-w-md rounded-3xl p-4 shadow-2xl space-y-3">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                <h3 class="font-bold text-cyan-300 flex items-center space-x-2 text-sm">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Settings & Offline Mode</span>
+                </h3>
+                <button id="btnCloseSettings" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-3 text-xs text-slate-300">
+                <!-- Offline Cache Manager Section -->
+                <div class="bg-slate-950/70 p-3 rounded-2xl border border-cyan-500/30 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-white flex items-center space-x-1.5">
+                            <i class="fa-solid fa-wifi text-cyan-400"></i>
+                            <span>Offline Cache Storage</span>
+                        </span>
+                        <span id="cacheProgressVal" class="text-[11px] font-bold text-cyan-400">0%</span>
+                    </div>
+
+                    <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-700">
+                        <div id="cacheProgressBar" class="bg-gradient-to-r from-cyan-400 to-emerald-400 h-full w-0 transition-all duration-300"></div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <p id="cacheStatusDetail" class="text-[10px] text-slate-400">Pre-fetch AI models for offline play.</p>
+                        <button id="btnStartPrecache" class="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-[11px] font-bold transition">
+                            Cache All Assets
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Difficulty Presets -->
+                <div>
+                    <label class="font-semibold text-white mb-1 block">Difficulty Preset:</label>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button class="preset-btn px-2 py-1 bg-slate-800 rounded-lg text-slate-300 border border-slate-700 hover:border-cyan-400 font-bold" data-preset="easy">Easy</button>
+                        <button class="preset-btn px-2 py-1 bg-slate-800 rounded-lg text-cyan-400 border border-cyan-500 font-bold" data-preset="medium">Medium</button>
+                        <button class="preset-btn px-2 py-1 bg-slate-800 rounded-lg text-slate-300 border border-slate-700 hover:border-cyan-400 font-bold" data-preset="hard">Hard</button>
+                    </div>
+                </div>
+
+                <!-- Hard Ice Hits Config -->
+                <div>
+                    <div class="flex justify-between mb-0.5">
+                        <label class="font-semibold text-white">Hard Ice Hits:</label>
+                        <span id="lblHits" class="font-bold text-cyan-400">4 Hits</span>
+                    </div>
+                    <input id="cfgHits" type="range" min="2" max="8" value="4" class="w-full accent-cyan-400 bg-slate-800 rounded-lg">
+                </div>
+
+                <!-- Ice Falling Speed -->
+                <div>
+                    <div class="flex justify-between mb-0.5">
+                        <label class="font-semibold text-white">Fall Speed:</label>
+                        <span id="lblFallSpeed" class="font-bold text-cyan-400">Normal</span>
+                    </div>
+                    <input id="cfgFallSpeed" type="range" min="1" max="3" value="2" class="w-full accent-cyan-400 bg-slate-800 rounded-lg">
+                </div>
+
+                <div class="flex items-center justify-between bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                    <span>Camera Mirrored Feed</span>
+                    <input id="cfgMirrored" type="checkbox" checked class="w-4 h-4 accent-cyan-500">
+                </div>
+
+                <div class="flex items-center justify-between bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                    <span>Show Hand Skeletons & Fist</span>
+                    <input id="cfgShowSkeleton" type="checkbox" checked class="w-4 h-4 accent-cyan-500">
+                </div>
+
+                <div class="flex items-center justify-between bg-slate-950/50 p-2 rounded-xl border border-slate-800">
+                    <span>Audio Sound FX</span>
+                    <input id="cfgSound" type="checkbox" checked class="w-4 h-4 accent-cyan-500">
+                </div>
+            </div>
+
+            <button id="btnSaveSettings" class="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition">
+                Save & Apply Settings
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+        /* ==========================================================================
+           1. SERVICE WORKER & OFFLINE CACHE PRE-FETCHER
+           ========================================================================== */
+        const CACHE_NAME = 'ice-punch-quiz-v1';
+        
+        // Critical assets required for offline camera motion quiz
+        const OFFLINE_ASSET_URLS = [
+            './',
+            'https://cdn.tailwindcss.com',
+            'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+            'https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@700;900&display=swap',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands_solution_wasm.js',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands_solution_wasm.wasm',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.binarypb',
+            'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands_solution_packed_assets.data'
+        ];
+
+        // Inline Service Worker registration via Blob
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const CACHE_NAME = '${CACHE_NAME}';
+                self.addEventListener('install', (e) => {
+                    self.skipWaiting();
+                });
+                self.addEventListener('activate', (e) => {
+                    e.waitUntil(clients.claim());
+                });
+                self.addEventListener('fetch', (event) => {
+                    event.respondWith(
+                        caches.match(event.request).then((cachedResponse) => {
+                            if (cachedResponse) return cachedResponse;
+                            return fetch(event.request).then((networkResponse) => {
+                                if (networkResponse && networkResponse.status === 200) {
+                                    const responseToCache = networkResponse.clone();
+                                    caches.open(CACHE_NAME).then((cache) => {
+                                        cache.put(event.request, responseToCache);
+                                    });
+                                }
+                                return networkResponse;
+                            }).catch(() => {
+                                return new Response("Offline resource unavailable", { status: 503 });
+                            });
+                        })
+                    );
+                });
+            `;
+
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(blob);
+
+            navigator.serviceWorker.register(swUrl)
+                .then(() => checkOfflineStatus())
+                .catch(err => console.log('ServiceWorker registration error:', err));
+        }
+
+        async function precacheAllAssets() {
+            const bar = document.getElementById('cacheProgressBar');
+            const val = document.getElementById('cacheProgressVal');
+            const statusDetail = document.getElementById('cacheStatusDetail');
+
+            if (!('caches' in window)) {
+                alert("CacheStorage is not supported on this browser.");
+                return;
+            }
+
+            try {
+                const cache = await caches.open(CACHE_NAME);
+                let loaded = 0;
+
+                for (let i = 0; i < OFFLINE_ASSET_URLS.length; i++) {
+                    const url = OFFLINE_ASSET_URLS[i];
+                    statusDetail.textContent = `Caching: ${url.split('/').pop()}`;
+                    try {
+                        await cache.add(new Request(url, { mode: 'no-cors' }));
+                    } catch(e) {
+                        console.warn('Failed to cache single asset:', url, e);
+                    }
+                    loaded++;
+                    const pct = Math.round((loaded / OFFLINE_ASSET_URLS.length) * 100);
+                    if (bar) bar.style.width = `${pct}%`;
+                    if (val) val.textContent = `${pct}%`;
+                }
+
+                statusDetail.textContent = "All camera assets cached for 100% offline use!";
+                checkOfflineStatus();
+            } catch (e) {
+                console.error("Caching error:", e);
+                statusDetail.textContent = "Caching complete with minor fallbacks.";
+            }
+        }
+
+        async function checkOfflineStatus() {
+            const badgeText = document.getElementById('offlineStatusText');
+            const badgeIcon = document.getElementById('offlineStatusBadge');
+            const startCacheText = document.getElementById('startCacheText');
+
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                const hasCache = keys.includes(CACHE_NAME);
+
+                if (hasCache || !navigator.onLine) {
+                    badgeText.textContent = "Offline Ready (Cached)";
+                    badgeIcon.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1";
+                    if (startCacheText) {
+                        startCacheText.textContent = "Offline Ready (Cached)";
+                        startCacheText.className = "text-emerald-400 font-bold";
+                    }
+                    return;
+                }
+            }
+
+            if (navigator.onLine) {
+                badgeText.textContent = "Online Mode";
+                badgeIcon.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-950 text-blue-300 border border-blue-500/40 flex items-center space-x-1";
+                if (startCacheText) {
+                    startCacheText.textContent = "Online (Click pre-cache for offline play)";
+                    startCacheText.className = "text-cyan-300 font-bold";
+                }
+            } else {
+                badgeText.textContent = "Offline";
+                badgeIcon.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-500/40 flex items-center space-x-1";
+            }
+        }
+
+        window.addEventListener('online', checkOfflineStatus);
+        window.addEventListener('offline', checkOfflineStatus);
+
+        /* ==========================================================================
+           2. DEFAULT QUESTIONS & CONFIG
+           ========================================================================== */
+        const DEFAULT_QUESTIONS = [
+            {
+                question: "Which planet in our solar system is known as the Red Planet?",
+                options: ["Venus", "Mars", "Jupiter", "Saturn"],
+                answer: 1, // B
+                isHardIce: true
+            },
+            {
+                question: "What is the chemical symbol for Gold?",
+                options: ["Au", "Ag", "Fe", "Hg"],
+                answer: 0, // A
+                isHardIce: true
+            },
+            {
+                question: "Which organ in the human body pumps blood?",
+                options: ["Lungs", "Brain", "Heart", "Liver"],
+                answer: 2, // C
+                isHardIce: false
+            },
+            {
+                question: "How many legs does a spider typically have?",
+                options: ["6", "10", "8", "12"],
+                answer: 2, // C
+                isHardIce: true
+            },
+            {
+                question: "What gas do humans need to breathe to survive?",
+                options: ["Carbon Dioxide", "Hydrogen", "Nitrogen", "Oxygen"],
+                answer: 3, // D
+                isHardIce: true
+            }
+        ];
+
+        let questions = JSON.parse(localStorage.getItem('ice_falling_quiz_qs')) || [...DEFAULT_QUESTIONS];
+
+        let config = {
+            hardIceHits: 4,
+            fallSpeedMult: 1.0,
+            mirrored: true,
+            showSkeleton: true,
+            soundEnabled: true
+        };
+
+        let gameState = {
+            active: false,
+            currentQIdx: 0,
+            score: 0,
+            combo: 0,
+            correctCount: 0,
+            timer: 25,
+            timerInterval: null,
+            isProcessingAnswer: false
+        };
+
+        /* ==========================================================================
+           3. AUDIO SYNTHESIZER
+           ========================================================================== */
+        class SoundFX {
+            constructor() { this.ctx = null; }
+            init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+            playPunch() {
+                if (!config.soundEnabled) return;
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.7, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            }
+
+            playCrack() {
+                if (!config.soundEnabled) return;
+                this.init();
+                const bufferSize = this.ctx.sampleRate * 0.08;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 1200;
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+
+            playShatter() {
+                if (!config.soundEnabled) return;
+                for (let i = 0; i < 4; i++) setTimeout(() => this.playCrack(), i * 25);
+            }
+
+            playCorrect() {
+                if (!config.soundEnabled) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now);
+                osc.frequency.setValueAtTime(659.25, now + 0.1);
+                osc.frequency.setValueAtTime(783.99, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            }
+
+            playWrong() {
+                if (!config.soundEnabled) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.linearRampToValueAtTime(100, now + 0.3);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        const audioFX = new SoundFX();
+
+        /* ==========================================================================
+           4. FALLING ICE BLOCK PHYSICS ENGINE & PARTICLES
+           ========================================================================== */
+        class IceBlock {
+            constructor(index, letter, isHard, canvasWidth, canvasHeight) {
+                this.index = index;
+                this.letter = letter;
+                this.isHard = isHard;
+                this.maxHealth = isHard ? config.hardIceHits : 1;
+                this.health = this.maxHealth;
+                this.canvasWidth = canvasWidth;
+                this.canvasHeight = canvasHeight;
+
+                this.size = Math.min(canvasWidth * 0.16, 75);
+                this.resetPosition();
+                this.lastHitTime = 0;
+            }
+
+            resetPosition() {
+                const colWidth = this.canvasWidth / 4;
+                const padding = 10;
+                this.x = (this.index * colWidth) + padding + Math.random() * Math.max(1, colWidth - this.size - padding * 2);
+                this.y = -this.size - Math.random() * 160;
+                this.speed = (1.2 + Math.random() * 0.8) * config.fallSpeedMult;
+                this.rotation = (Math.random() - 0.5) * 0.2;
+                this.health = this.maxHealth;
+                this.hitImpactTimer = 0;
+            }
+
+            update() {
+                this.y += this.speed;
+                if (this.hitImpactTimer > 0) this.hitImpactTimer--;
+                if (this.y > this.canvasHeight + this.size) this.resetPosition();
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x + this.size / 2, this.y + this.size / 2);
+                ctx.rotate(this.rotation);
+
+                const scale = this.hitImpactTimer > 0 ? 1.15 : 1.0;
+                ctx.scale(scale, scale);
+
+                ctx.fillStyle = this.isHard ? 'rgba(14, 116, 144, 0.85)' : 'rgba(56, 189, 248, 0.75)';
+                ctx.strokeStyle = this.isHard ? '#67e8f9' : '#e0f2fe';
+                ctx.lineWidth = 3;
+
+                ctx.beginPath();
+                ctx.roundRect(-this.size / 2, -this.size / 2, this.size, this.size, 14);
+                ctx.fill();
+                ctx.stroke();
+
+                // Glare
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+                ctx.beginPath();
+                ctx.roundRect(-this.size / 2 + 4, -this.size / 2 + 4, this.size - 8, this.size / 3, 8);
+                ctx.fill();
+
+                // Cracks
+                if (this.health < this.maxHealth) {
+                    const damageRatio = (this.maxHealth - this.health) / this.maxHealth;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.moveTo(-12, -8); ctx.lineTo(0, 4); ctx.lineTo(12, -4);
+                    if (damageRatio > 0.5) {
+                        ctx.moveTo(0, 4); ctx.lineTo(-8, 16); ctx.lineTo(8, 20);
+                    }
+                    ctx.stroke();
+                }
+
+                // Letter
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `900 ${Math.round(this.size * 0.45)}px "Fredoka", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 6;
+                ctx.fillText(this.letter, 0, 2);
+
+                // Durability dots
+                if (this.isHard && this.maxHealth > 1) {
+                    const dotRadius = 2.5;
+                    const startX = -((this.maxHealth - 1) * 7) / 2;
+                    for (let h = 0; h < this.maxHealth; h++) {
+                        ctx.beginPath();
+                        ctx.arc(startX + (h * 7), this.size / 2 - 7, dotRadius, 0, Math.PI * 2);
+                        ctx.fillStyle = h < this.health ? '#38bdf8' : 'rgba(255,255,255,0.2)';
+                        ctx.fill();
+                    }
+                }
+
+                ctx.restore();
+            }
+
+            registerHit() {
+                const now = Date.now();
+                if (now - this.lastHitTime < 200) return false;
+                this.lastHitTime = now;
+                this.health--;
+                this.hitImpactTimer = 6;
+                return true;
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 12;
+                this.vy = (Math.random() - 0.5) * 12 - 2;
+                this.size = Math.random() * 7 + 3;
+                this.color = color || '#38bdf8';
+                this.life = 1.0;
+                this.decay = Math.random() * 0.04 + 0.02;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.25;
+                this.life -= this.decay;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        /* ==========================================================================
+           5. DOM & CANVAS RENDER ENGINE
+           ========================================================================== */
+        const DOM = {
+            webcam: document.getElementById('webcam'),
+            canvas: document.getElementById('gameCanvas'),
+            ctx: document.getElementById('gameCanvas').getContext('2d'),
+            canvasWrapper: document.getElementById('canvasWrapper'),
+            startScreen: document.getElementById('startScreen'),
+            endScreen: document.getElementById('endScreen'),
+            questionText: document.getElementById('questionText'),
+            timerBar: document.getElementById('timerBar'),
+            scoreVal: document.getElementById('scoreVal'),
+            comboVal: document.getElementById('comboVal'),
+            qProgress: document.getElementById('qProgress'),
+            gameStats: document.getElementById('gameStats'),
+            cameraStatus: document.getElementById('cameraStatus'),
+            statusIndicator: document.getElementById('statusIndicator'),
+            iceDifficultyBadge: document.getElementById('iceDifficultyBadge'),
+            optionsPanel: document.getElementById('optionsPanel'),
+            optionCards: document.querySelectorAll('.option-card'),
+            questionsModal: document.getElementById('questionsModal'),
+            settingsModal: document.getElementById('settingsModal'),
+            questionsTableBody: document.getElementById('questionsTableBody'),
+            qCount: document.getElementById('qCount')
+        };
+
+        let iceBlocks = [];
+        let particles = [];
+        let trackedHands = [];
+        let prevHandPositions = [];
+
+        function resizeCanvas() {
+            DOM.canvas.width = DOM.canvasWrapper.clientWidth;
+            DOM.canvas.height = DOM.canvasWrapper.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function initIceBlocks(isHardQuestion) {
+            iceBlocks = [];
+            const letters = ['A', 'B', 'C', 'D'];
+            for (let i = 0; i < 4; i++) {
+                iceBlocks.push(new IceBlock(i, letters[i], isHardQuestion, DOM.canvas.width, DOM.canvas.height));
+            }
+        }
+
+        function createShatterParticles(x, y) {
+            const colors = ['#e0f2fe', '#38bdf8', '#0284c7', '#ffffff'];
+            for (let i = 0; i < 22; i++) {
+                particles.push(new Particle(x, y, colors[Math.floor(Math.random() * colors.length)]));
+            }
+        }
+
+        function triggerScreenShake() {
+            DOM.canvasWrapper.classList.add('shake');
+            setTimeout(() => DOM.canvasWrapper.classList.remove('shake'), 250);
+        }
+
+        function gameLoop() {
+            const cw = DOM.canvas.width;
+            const ch = DOM.canvas.height;
+
+            DOM.ctx.save();
+            DOM.ctx.clearRect(0, 0, cw, ch);
+
+            if (DOM.webcam.readyState >= 2) {
+                if (config.mirrored) {
+                    DOM.ctx.scale(-1, 1);
+                    DOM.ctx.drawImage(DOM.webcam, -cw, 0, cw, ch);
+                } else {
+                    DOM.ctx.drawImage(DOM.webcam, 0, 0, cw, ch);
+                }
+            }
+            DOM.ctx.restore();
+
+            DOM.ctx.fillStyle = 'rgba(15, 23, 42, 0.45)';
+            DOM.ctx.fillRect(0, 0, cw, ch);
+
+            if (gameState.active && !gameState.isProcessingAnswer) {
+                iceBlocks.forEach(block => {
+                    block.update();
+                    block.draw(DOM.ctx);
+                });
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw(DOM.ctx);
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            if (config.showSkeleton) {
+                trackedHands.forEach(hand => {
+                    DOM.ctx.save();
+                    DOM.ctx.beginPath();
+                    DOM.ctx.arc(hand.x, hand.y, 22, 0, Math.PI * 2);
+                    DOM.ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
+                    DOM.ctx.fill();
+                    DOM.ctx.lineWidth = 3;
+                    DOM.ctx.strokeStyle = '#ffffff';
+                    DOM.ctx.stroke();
+
+                    DOM.ctx.beginPath();
+                    DOM.ctx.arc(hand.x, hand.y, 30, 0, Math.PI * 2);
+                    DOM.ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+                    DOM.ctx.stroke();
+                    DOM.ctx.restore();
+                });
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function initCameraTracking() {
+            DOM.cameraStatus.textContent = 'Camera: Initializing MediaPipe...';
+
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults(onHandResults);
+
+            const camera = new Camera(DOM.webcam, {
+                onFrame: async () => {
+                    await hands.send({ image: DOM.webcam });
+                },
+                width: 1280,
+                height: 720
+            });
+
+            camera.start()
+                .then(() => {
+                    DOM.cameraStatus.textContent = 'Camera: Active & Mirrored';
+                    DOM.statusIndicator.className = 'inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+                })
+                .catch(err => {
+                    console.error("Camera error:", err);
+                    DOM.cameraStatus.textContent = 'Camera: Fallback (Click option cards to punch)';
+                    DOM.statusIndicator.className = 'inline-block w-2 h-2 rounded-full bg-amber-400';
+                });
+        }
+
+        function onHandResults(results) {
+            const cw = DOM.canvas.width;
+            const ch = DOM.canvas.height;
+            trackedHands = [];
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                results.multiHandLandmarks.forEach((landmarks, hIdx) => {
+                    const indexTip = landmarks[8];
+                    
+                    const handX = config.mirrored ? (1 - indexTip.x) * cw : indexTip.x * cw;
+                    const handY = indexTip.y * ch;
+
+                    trackedHands.push({ x: handX, y: handY });
+                    checkHandIceHits(handX, handY);
+                });
+            }
+        }
+
+        function checkHandIceHits(hx, hy) {
+            if (!gameState.active || gameState.isProcessingAnswer) return;
+
+            iceBlocks.forEach(block => {
+                const boxX = block.x;
+                const boxY = block.y;
+                const boxS = block.size;
+
+                if (hx >= boxX && hx <= boxX + boxS && hy >= boxY && hy <= boxY + boxS) {
+                    DOM.optionCards[block.index].classList.add('targeted');
+
+                    if (block.registerHit()) {
+                        if (block.health > 0) {
+                            audioFX.playPunch();
+                            audioFX.playCrack();
+                            createShatterParticles(hx, hy);
+                        } else {
+                            audioFX.playShatter();
+                            createShatterParticles(block.x + boxS / 2, block.y + boxS / 2);
+                            triggerScreenShake();
+                            evaluateAnswer(block.index);
+                        }
+                    }
+                } else {
+                    DOM.optionCards[block.index].classList.remove('targeted');
+                }
+            });
+        }
+
+        /* ==========================================================================
+           6. QUIZ GAME CONTROLLER
+           ========================================================================== */
+        function startGame() {
+            if (questions.length === 0) {
+                alert("Please add at least one question first!");
+                return;
+            }
+
+            gameState.active = true;
+            gameState.currentQIdx = 0;
+            gameState.score = 0;
+            gameState.combo = 0;
+            gameState.correctCount = 0;
+
+            DOM.startScreen.classList.add('hidden');
+            DOM.endScreen.classList.add('hidden');
+            DOM.gameStats.classList.remove('hidden');
+
+            loadQuestion(gameState.currentQIdx);
+        }
+
+        function loadQuestion(idx) {
+            if (idx >= questions.length) {
+                endGame();
+                return;
+            }
+
+            const q = questions[idx];
+            gameState.isProcessingAnswer = false;
+
+            DOM.questionText.textContent = q.question;
+            DOM.qProgress.textContent = `${idx + 1}/${questions.length}`;
+            DOM.scoreVal.textContent = gameState.score;
+            DOM.comboVal.textContent = `x${gameState.combo}`;
+
+            if (q.isHardIce) {
+                DOM.iceDifficultyBadge.textContent = `HARD ICE: ${config.hardIceHits} PUNCHES`;
+                DOM.iceDifficultyBadge.className = 'text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-500/40 tracking-wider';
+            } else {
+                DOM.iceDifficultyBadge.textContent = 'STANDARD ICE: 1 PUNCH';
+                DOM.iceDifficultyBadge.className = 'text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/40 tracking-wider';
+            }
+
+            DOM.optionCards.forEach((card, i) => {
+                card.className = 'option-card rounded-xl p-2.5 flex items-center space-x-2.5 cursor-pointer';
+                const textElem = card.querySelector('.option-text');
+                if (textElem && q.options[i]) {
+                    textElem.textContent = q.options[i];
+                }
+            });
+
+            initIceBlocks(q.isHardIce);
+            resetTimer();
+        }
+
+        function resetTimer() {
+            clearInterval(gameState.timerInterval);
+            gameState.timer = 25;
+            DOM.timerBar.style.width = '100%';
+
+            gameState.timerInterval = setInterval(() => {
+                if (!gameState.active || gameState.isProcessingAnswer) return;
+
+                gameState.timer--;
+                const pct = (gameState.timer / 25) * 100;
+                DOM.timerBar.style.width = `${pct}%`;
+
+                if (gameState.timer <= 0) {
+                    clearInterval(gameState.timerInterval);
+                    audioFX.playWrong();
+                    evaluateAnswer(-1);
+                }
+            }, 1000);
+        }
+
+        function evaluateAnswer(selectedIndex) {
+            gameState.isProcessingAnswer = true;
+            clearInterval(gameState.timerInterval);
+
+            const q = questions[gameState.currentQIdx];
+            const isCorrect = selectedIndex === q.answer;
+
+            if (isCorrect) {
+                audioFX.playCorrect();
+                gameState.combo++;
+                gameState.correctCount++;
+                const timeBonus = gameState.timer * 10;
+                const comboBonus = gameState.combo * 50;
+                gameState.score += (100 + timeBonus + comboBonus);
+
+                DOM.optionCards[selectedIndex].classList.add('correct');
+            } else {
+                audioFX.playWrong();
+                gameState.combo = 0;
+
+                if (selectedIndex >= 0) DOM.optionCards[selectedIndex].classList.add('wrong');
+                DOM.optionCards[q.answer].classList.add('correct');
+            }
+
+            DOM.scoreVal.textContent = gameState.score;
+            DOM.comboVal.textContent = `x${gameState.combo}`;
+
+            setTimeout(() => {
+                gameState.currentQIdx++;
+                loadQuestion(gameState.currentQIdx);
+            }, 2000);
+        }
+
+        function endGame() {
+            gameState.active = false;
+            clearInterval(gameState.timerInterval);
+
+            DOM.endScreen.classList.remove('hidden');
+            document.getElementById('finalScore').textContent = gameState.score;
+            const accuracy = Math.round((gameState.correctCount / questions.length) * 100) || 0;
+            document.getElementById('finalAccuracy').textContent = `${accuracy}%`;
+        }
+
+        /* ==========================================================================
+           7. QUESTION DECK MANAGER & CSV
+           ========================================================================== */
+        function renderQuestionsList() {
+            DOM.questionsTableBody.innerHTML = '';
+            DOM.qCount.textContent = questions.length;
+
+            questions.forEach((q, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-slate-800 hover:bg-slate-800/40';
+                tr.innerHTML = `
+                    <td class="p-2 font-bold text-slate-500">${idx + 1}</td>
+                    <td class="p-2 font-medium text-white max-w-xs truncate">${q.question}</td>
+                    <td class="p-2 text-cyan-400 font-bold">${['A','B','C','D'][q.answer]}</td>
+                    <td class="p-2">${q.isHardIce ? '<span class="text-indigo-400 font-bold">Hard</span>' : '<span class="text-slate-400">Std</span>'}</td>
+                    <td class="p-2 text-right">
+                        <button onclick="deleteQuestion(${idx})" class="text-rose-400 hover:text-rose-300 p-1">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                DOM.questionsTableBody.appendChild(tr);
+            });
+        }
+
+        window.deleteQuestion = function(idx) {
+            questions.splice(idx, 1);
+            saveQuestionsToStorage();
+            renderQuestionsList();
+        };
+
+        function saveQuestionsToStorage() {
+            localStorage.setItem('ice_falling_quiz_qs', JSON.stringify(questions));
+        }
+
+        document.getElementById('csvFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const lines = evt.target.result.split(/\r\n|\n/);
+                const imported = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                    if (!lines[i].trim()) continue;
+                    const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+                    if (cols.length >= 6) {
+                        let ansIdx = 0;
+                        const ansCol = cols[5].toUpperCase();
+                        if (ansCol === 'B' || ansCol === '1') ansIdx = 1;
+                        else if (ansCol === 'C' || ansCol === '2') ansIdx = 2;
+                        else if (ansCol === 'D' || ansCol === '3') ansIdx = 3;
+
+                        imported.push({
+                            question: cols[0],
+                            options: [cols[1], cols[2], cols[3], cols[4]],
+                            answer: ansIdx,
+                            isHardIce: cols[6] ? cols[6].toLowerCase() === 'true' : true
+                        });
+                    }
+                }
+
+                if (imported.length > 0) {
+                    questions = imported;
+                    saveQuestionsToStorage();
+                    renderQuestionsList();
+                    alert(`Imported ${imported.length} questions successfully!`);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        document.getElementById('btnDownloadSampleCSV').addEventListener('click', () => {
+            const sample = "question,optionA,optionB,optionC,optionD,answer,hardIce\n" +
+                "\"Which gas do plants absorb?\",\"Oxygen\",\"Carbon Dioxide\",\"Nitrogen\",\"Hydrogen\",B,true\n" +
+                "\"How many legs does an insect have?\",\"4\",\"6\",\"8\",\"12\",B,false";
+            const blob = new Blob([sample], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "falling_ice_quiz_sample.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('btnAddQuestion').addEventListener('click', () => {
+            const qText = document.getElementById('newQText').value.trim();
+            const optA = document.getElementById('newOptA').value.trim();
+            const optB = document.getElementById('newOptB').value.trim();
+            const optC = document.getElementById('newOptC').value.trim();
+            const optD = document.getElementById('newOptD').value.trim();
+            const ans = parseInt(document.getElementById('newCorrectIdx').value);
+            const isHard = document.getElementById('newIsHardIce').checked;
+
+            if (!qText || !optA || !optB || !optC || !optD) {
+                alert("Please fill in question and all 4 options!");
+                return;
+            }
+
+            questions.push({ question: qText, options: [optA, optB, optC, optD], answer: ans, isHardIce: isHard });
+            saveQuestionsToStorage();
+            renderQuestionsList();
+
+            document.getElementById('newQText').value = '';
+            document.getElementById('newOptA').value = '';
+            document.getElementById('newOptB').value = '';
+            document.getElementById('newOptC').value = '';
+            document.getElementById('newOptD').value = '';
+        });
+
+        document.getElementById('btnResetDefaultQuestions').addEventListener('click', () => {
+            if (confirm("Reset to default question deck?")) {
+                questions = [...DEFAULT_QUESTIONS];
+                saveQuestionsToStorage();
+                renderQuestionsList();
+            }
+        });
+
+        /* ==========================================================================
+           8. EVENT BINDINGS & INIT
+           ========================================================================== */
+        document.getElementById('btnStartGame').addEventListener('click', () => {
+            audioFX.init();
+            startGame();
+        });
+
+        document.getElementById('btnRestart').addEventListener('click', startGame);
+
+        // Fullscreen Toggle
+        document.getElementById('btnFullscreen').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => console.log(err));
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
+
+        // Pre-cache trigger
+        document.getElementById('btnPrecacheAssets').addEventListener('click', precacheAllAssets);
+        document.getElementById('btnStartPrecache').addEventListener('click', precacheAllAssets);
+
+        // Fallback Mouse Click on bottom options
+        DOM.optionCards.forEach((card, idx) => {
+            card.addEventListener('click', () => {
+                if (!gameState.active || gameState.isProcessingAnswer) return;
+                const targetBlock = iceBlocks[idx];
+                if (targetBlock) {
+                    if (targetBlock.registerHit()) {
+                        if (targetBlock.health > 0) {
+                            audioFX.playPunch();
+                            audioFX.playCrack();
+                            createShatterParticles(targetBlock.x + 35, targetBlock.y + 35);
+                        } else {
+                            audioFX.playShatter();
+                            createShatterParticles(targetBlock.x + 35, targetBlock.y + 35);
+                            triggerScreenShake();
+                            evaluateAnswer(idx);
+                        }
+                    }
+                }
+            });
+        });
+
+        // Modals
+        document.getElementById('btnManageQuestions').addEventListener('click', () => {
+            renderQuestionsList();
+            DOM.questionsModal.classList.remove('hidden');
+        });
+        document.getElementById('btnOpenManageEnd').addEventListener('click', () => {
+            DOM.endScreen.classList.add('hidden');
+            renderQuestionsList();
+            DOM.questionsModal.classList.remove('hidden');
+        });
+        document.getElementById('btnCloseQuestionsModal').addEventListener('click', () => DOM.questionsModal.classList.add('hidden'));
+        document.getElementById('btnSaveQuestions').addEventListener('click', () => DOM.questionsModal.classList.add('hidden'));
+
+        document.getElementById('btnSettings').addEventListener('click', () => DOM.settingsModal.classList.remove('hidden'));
+        document.getElementById('btnCloseSettings').addEventListener('click', () => DOM.settingsModal.classList.add('hidden'));
+
+        // Settings & Presets
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const preset = e.target.dataset.preset;
+                document.querySelectorAll('.preset-btn').forEach(b => {
+                    b.className = "preset-btn px-2 py-1 bg-slate-800 rounded-lg text-slate-300 border border-slate-700 hover:border-cyan-400 font-bold";
+                });
+                e.target.className = "preset-btn px-2 py-1 bg-slate-800 rounded-lg text-cyan-400 border border-cyan-500 font-bold";
+
+                if (preset === 'easy') {
+                    config.hardIceHits = 2;
+                    config.fallSpeedMult = 0.7;
+                } else if (preset === 'medium') {
+                    config.hardIceHits = 4;
+                    config.fallSpeedMult = 1.0;
+                } else if (preset === 'hard') {
+                    config.hardIceHits = 6;
+                    config.fallSpeedMult = 1.4;
+                }
+
+                document.getElementById('cfgHits').value = config.hardIceHits;
+                document.getElementById('lblHits').textContent = `${config.hardIceHits} Hits`;
+            });
+        });
+
+        document.getElementById('cfgHits').addEventListener('input', (e) => {
+            config.hardIceHits = parseInt(e.target.value);
+            document.getElementById('lblHits').textContent = `${config.hardIceHits} Hits`;
+        });
+        document.getElementById('cfgMirrored').addEventListener('change', (e) => { config.mirrored = e.target.checked; });
+        document.getElementById('cfgShowSkeleton').addEventListener('change', (e) => { config.showSkeleton = e.target.checked; });
+        document.getElementById('cfgSound').addEventListener('change', (e) => { config.soundEnabled = e.target.checked; });
+        document.getElementById('btnSaveSettings').addEventListener('click', () => DOM.settingsModal.classList.add('hidden'));
+
+        window.addEventListener('load', () => {
+            renderQuestionsList();
+            initCameraTracking();
+            requestAnimationFrame(gameLoop);
+        });
+    </script>
+</body>
+</html>
